@@ -2,6 +2,8 @@ import { Text, DatePicker, Stack, TextField, PrimaryButton, DefaultButton, Dropd
 import { useEffect, useState, FC, ReactElement, MouseEvent, FormEvent } from 'react';
 import { TodoItem, TodoItemState } from '../models';
 import { stackGaps, stackItemMargin, stackItemPadding, titleStackStyles } from '../ux/styles';
+import CountdownTimer from './countdownTimer';
+import TimePicker from './timePicker';
 
 interface TodoItemDetailPaneProps {
     item?: TodoItem;
@@ -52,7 +54,35 @@ export const TodoItemDetailPane: FC<TodoItemDetailPaneProps> = (props: TodoItemD
     }
 
     const onDueDateChange = (date: Date | null | undefined) => {
-        setDueDate(date || undefined);
+        if (date) {
+            // If we have an existing dueDate with time, preserve the time when date changes
+            if (dueDate) {
+                const newDate = new Date(date);
+                newDate.setHours(dueDate.getHours(), dueDate.getMinutes(), 0, 0);
+                setDueDate(newDate);
+            } else {
+                // Default to 5:00 PM for new dates
+                const newDate = new Date(date);
+                newDate.setHours(17, 0, 0, 0);
+                setDueDate(newDate);
+            }
+        } else {
+            setDueDate(undefined);
+        }
+    }
+
+    const onTimeChange = (time: Date | null) => {
+        if (time && dueDate) {
+            // Preserve the date part, update the time part
+            const newDate = new Date(dueDate);
+            newDate.setHours(time.getHours(), time.getMinutes(), 0, 0);
+            setDueDate(newDate);
+        } else if (time && !dueDate) {
+            // If time is set but no date, set to today with the selected time
+            const newDate = new Date();
+            newDate.setHours(time.getHours(), time.getMinutes(), 0, 0);
+            setDueDate(newDate);
+        }
     }
 
     const todoStateOptions: IDropdownOption[] = [
@@ -68,12 +98,28 @@ export const TodoItemDetailPane: FC<TodoItemDetailPaneProps> = (props: TodoItemD
                     <Stack.Item styles={titleStackStyles} tokens={stackItemPadding}>
                         <Text block variant="xLarge">{name}</Text>
                         <Text variant="small">{description}</Text>
+                        {dueDate && (
+                            <Stack tokens={{ padding: '10px 0 0 0' }}>
+                                <Text variant="medium" style={{ marginBottom: '8px' }}>Time Remaining:</Text>
+                                <CountdownTimer 
+                                    dueDate={new Date(dueDate)} 
+                                    isCompleted={state === TodoItemState.Done}
+                                />
+                            </Stack>
+                        )}
                     </Stack.Item>
                     <Stack.Item tokens={stackItemMargin}>
                         <TextField label="Name" placeholder="Item name" required value={name} onChange={(_e, value) => setName(value || '')} />
                         <TextField label="Description" placeholder="Item description" multiline size={20} value={description || ''} onChange={(_e, value) => setDescription(value)} />
                         <Dropdown label="State" options={todoStateOptions} required selectedKey={state} onChange={onStateChange} />
                         <DatePicker label="Due Date" placeholder="Due date" value={dueDate} onSelectDate={onDueDateChange} />
+                        {dueDate && (
+                            <TimePicker 
+                                label="Due Time" 
+                                value={dueDate} 
+                                onTimeChange={onTimeChange} 
+                            />
+                        )}
                     </Stack.Item>
                     <Stack.Item tokens={stackItemMargin}>
                         <Stack horizontal tokens={stackGaps}>

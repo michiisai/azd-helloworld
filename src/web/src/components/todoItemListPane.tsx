@@ -1,8 +1,10 @@
-import { CommandBar, DetailsList, DetailsListLayoutMode, IStackStyles, Selection, Label, Spinner, SpinnerSize, Stack, IIconProps, SearchBox, Text, IGroup, IColumn, MarqueeSelection, FontIcon, IObjectWithKey, CheckboxVisibility, IDetailsGroupRenderProps, getTheme } from '@fluentui/react';
+import { CommandBar, DetailsList, DetailsListLayoutMode, IStackStyles, Selection, Label, Spinner, SpinnerSize, Stack, IIconProps, SearchBox, Text, IGroup, IColumn, MarqueeSelection, FontIcon, IObjectWithKey, CheckboxVisibility, IDetailsGroupRenderProps, getTheme, DatePicker, PrimaryButton, DefaultButton, TextField, Panel, PanelType } from '@fluentui/react';
 import { ReactElement, useEffect, useState, FormEvent, FC } from 'react';
 import { useNavigate } from 'react-router';
 import { TodoItem, TodoItemState, TodoList } from '../models';
 import { stackItemPadding } from '../ux/styles';
+import CountdownTimer from './countdownTimer';
+import TimePicker from './timePicker';
 
 interface TodoItemListPaneProps {
     list?: TodoList
@@ -56,6 +58,9 @@ const TodoItemListPane: FC<TodoItemListPaneProps> = (props: TodoItemListPaneProp
     const theme = getTheme();
     const navigate = useNavigate();
     const [newItemName, setNewItemName] = useState('');
+    const [newItemDescription, setNewItemDescription] = useState('');
+    const [newItemDueDate, setNewItemDueDate] = useState<Date | undefined>();
+    const [showAddTaskPanel, setShowAddTaskPanel] = useState(false);
     const [items, setItems] = useState(createListItems(props.items || []));
     const [selectedItems, setSelectedItems] = useState<TodoItem[]>([]);
     const [isDoneCategoryCollapsed, setIsDoneCategoryCollapsed] = useState(true);
@@ -129,14 +134,48 @@ const TodoItemListPane: FC<TodoItemListPaneProps> = (props: TodoItemListPaneProp
                 name: newItemName,
                 listId: props.list?.id || '',
                 state: TodoItemState.Todo,
+                description: newItemDescription || undefined,
+                dueDate: newItemDueDate
             }
             props.onCreated(item);
             setNewItemName('');
+            setNewItemDescription('');
+            setNewItemDueDate(undefined);
+            setShowAddTaskPanel(false);
         }
     }
 
-    const onNewItemChanged = (_evt?: FormEvent<HTMLInputElement>, value?: string) => {
+    const onNewItemChanged = (_evt?: FormEvent<HTMLInputElement | HTMLTextAreaElement>, value?: string) => {
         setNewItemName(value || '');
+    }
+
+    const onNewItemDescriptionChanged = (_evt?: FormEvent<HTMLInputElement | HTMLTextAreaElement>, value?: string) => {
+        setNewItemDescription(value || '');
+    }
+
+    const onNewItemDueDateChange = (date: Date | null | undefined) => {
+        if (date) {
+            // Default to 5:00 PM for new dates
+            const newDate = new Date(date);
+            newDate.setHours(17, 0, 0, 0);
+            setNewItemDueDate(newDate);
+        } else {
+            setNewItemDueDate(undefined);
+        }
+    }
+
+    const onNewItemTimeChange = (time: Date | null) => {
+        if (time && newItemDueDate) {
+            // Preserve the date part, update the time part
+            const newDate = new Date(newItemDueDate);
+            newDate.setHours(time.getHours(), time.getMinutes(), 0, 0);
+            setNewItemDueDate(newDate);
+        } else if (time && !newItemDueDate) {
+            // If time is set but no date, set to today with the selected time
+            const newDate = new Date();
+            newDate.setHours(time.getHours(), time.getMinutes(), 0, 0);
+            setNewItemDueDate(newDate);
+        }
     }
 
     const selectItem = (item: TodoDisplayItem) => {
@@ -153,7 +192,7 @@ const TodoItemListPane: FC<TodoItemListPaneProps> = (props: TodoItemListPaneProp
 
     const columns: IColumn[] = [
         { key: 'name', name: 'Name', fieldName: 'name', minWidth: 100 },
-        { key: 'dueDate', name: 'Due', fieldName: 'dueDate', minWidth: 100 },
+        { key: 'dueDate', name: 'Time Remaining', fieldName: 'dueDate', minWidth: 150 },
         { key: 'completedDate', name: 'Completed', fieldName: 'completedDate', minWidth: 100 },
     ];
 
@@ -183,6 +222,17 @@ const TodoItemListPane: FC<TodoItemListPaneProps> = (props: TodoItemListPaneProp
                         }
                     </>
                 );
+            case "dueDate":
+                if (item.data.dueDate) {
+                    return (
+                        <CountdownTimer 
+                            dueDate={new Date(item.data.dueDate)} 
+                            isCompleted={item.state === TodoItemState.Done}
+                        />
+                    );
+                } else {
+                    return <Text variant="small" style={{ color: '#605e5c' }}>No due date</Text>;
+                }
             default:
                 return (<Text variant="small">{fieldContent}</Text>)
         }
@@ -195,6 +245,15 @@ const TodoItemListPane: FC<TodoItemListPaneProps> = (props: TodoItemListPaneProp
                     <Stack horizontal styles={stackStyles}>
                         <Stack.Item grow={1}>
                             <SearchBox value={newItemName} placeholder="Add an item" iconProps={addIconProps} onChange={onNewItemChanged} disabled={props.disabled} />
+                        </Stack.Item>
+                        <Stack.Item>
+                            <PrimaryButton 
+                                text="Add with Details" 
+                                iconProps={{ iconName: 'Add' }}
+                                onClick={() => setShowAddTaskPanel(true)}
+                                disabled={props.disabled}
+                                style={{ marginLeft: '8px' }}
+                            />
                         </Stack.Item>
                         <Stack.Item>
                             <CommandBar
@@ -219,6 +278,60 @@ const TodoItemListPane: FC<TodoItemListPaneProps> = (props: TodoItemListPaneProp
                     </Stack>
                 </form>
             </Stack.Item>
+            
+            <Panel
+                headerText="Add New Task"
+                isOpen={showAddTaskPanel}
+                onDismiss={() => setShowAddTaskPanel(false)}
+                type={PanelType.medium}
+            >
+                <Stack tokens={{ childrenGap: 16 }}>
+                    <TextField 
+                        label="Task Name" 
+                        placeholder="Enter task name" 
+                        required
+                        value={newItemName}
+                        onChange={onNewItemChanged}
+                    />
+                    <TextField 
+                        label="Description" 
+                        placeholder="Enter task description (optional)" 
+                        multiline
+                        rows={3}
+                        value={newItemDescription}
+                        onChange={onNewItemDescriptionChanged}
+                    />
+                    <DatePicker 
+                        label="Due Date (optional)" 
+                        placeholder="Select due date"
+                        value={newItemDueDate}
+                        onSelectDate={onNewItemDueDateChange}
+                    />
+                    {newItemDueDate && (
+                        <TimePicker 
+                            label="Due Time" 
+                            value={newItemDueDate} 
+                            onTimeChange={onNewItemTimeChange} 
+                        />
+                    )}
+                    <Stack horizontal tokens={{ childrenGap: 8 }}>
+                        <PrimaryButton 
+                            text="Add Task" 
+                            onClick={(e) => onFormSubmit(e as any)}
+                            disabled={!newItemName.trim()}
+                        />
+                        <DefaultButton 
+                            text="Cancel" 
+                            onClick={() => {
+                                setShowAddTaskPanel(false);
+                                setNewItemName('');
+                                setNewItemDescription('');
+                                setNewItemDueDate(undefined);
+                            }}
+                        />
+                    </Stack>
+                </Stack>
+            </Panel>
             {items.length > 0 &&
                 <Stack.Item>
                     <MarqueeSelection selection={selection}>
